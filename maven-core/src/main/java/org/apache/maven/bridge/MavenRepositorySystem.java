@@ -710,7 +710,7 @@ public class MavenRepositorySystem
 
     private static final String EXTERNAL_WILDCARD = "external:*";
 
-    private static final String HTTP_WILDCARD = "http:*";
+    private static final String EXTERNAL_HTTP_WILDCARD = "external:http:*";
 
     public static Mirror getMirror( ArtifactRepository repository, List<Mirror> mirrors )
     {
@@ -743,7 +743,7 @@ public class MavenRepositorySystem
      * <ul>
      * <li>{@code *} = everything,</li>
      * <li>{@code external:*} = everything not on the localhost and not file based,</li>
-     * <li>{@code http:*} = any repository using HTTP protocol,</li>
+     * <li>{@code external:http:*} = any repository not on the localhost using HTTP protocol,</li>
      * <li>{@code repo,repo1} = {@code repo} or {@code repo1},</li>
      * <li>{@code *,!repo1} = everything except {@code repo1}.</li>
      * </ul>
@@ -790,8 +790,8 @@ public class MavenRepositorySystem
                     result = true;
                     // don't stop processing in case a future segment explicitly excludes this repo
                 }
-                // check for http:*
-                else if ( HTTP_WILDCARD.equals( repo ) && isHttpRepo( originalRepository ) )
+                // check for external:http:*
+                else if ( EXTERNAL_HTTP_WILDCARD.equals( repo ) && isExternalHttpRepo( originalRepository ) )
                 {
                     result = true;
                     // don't stop processing in case a future segment explicitly excludes this repo
@@ -828,17 +828,18 @@ public class MavenRepositorySystem
     }
 
     /**
-     * Checks the URL to see if this repository refers to a repository using HTTP protocol.
+     * Checks the URL to see if this repository refers to a non-localhost repository using HTTP protocol.
      *
      * @param originalRepository
      * @return true if external.
      */
-    static boolean isHttpRepo( ArtifactRepository originalRepository )
+    static boolean isExternalHttpRepo( ArtifactRepository originalRepository )
     {
         try
         {
             URL url = new URL( originalRepository.getUrl() );
-            return "http".equalsIgnoreCase( url.getProtocol() );
+            return "http".equalsIgnoreCase( url.getProtocol() )
+                && !( "localhost".equals( url.getHost() ) || "127.0.0.1".equals( url.getHost() ) );
         }
         catch ( MalformedURLException e )
         {
