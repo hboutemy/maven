@@ -710,6 +710,8 @@ public class MavenRepositorySystem
 
     private static final String EXTERNAL_WILDCARD = "external:*";
 
+    private static final String HTTP_WILDCARD = "http:*";
+
     public static Mirror getMirror( ArtifactRepository repository, List<Mirror> mirrors )
     {
         String repoId = repository.getId();
@@ -741,6 +743,7 @@ public class MavenRepositorySystem
      * <ul>
      * <li>{@code *} = everything,</li>
      * <li>{@code external:*} = everything not on the localhost and not file based,</li>
+     * <li>{@code http:*} = any repository using HTTP protocol,</li>
      * <li>{@code repo,repo1} = {@code repo} or {@code repo1},</li>
      * <li>{@code *,!repo1} = everything except {@code repo1}.</li>
      * </ul>
@@ -787,6 +790,12 @@ public class MavenRepositorySystem
                     result = true;
                     // don't stop processing in case a future segment explicitly excludes this repo
                 }
+                // check for http:*
+                else if ( HTTP_WILDCARD.equals( repo ) && isHttpRepo( originalRepository ) )
+                {
+                    result = true;
+                    // don't stop processing in case a future segment explicitly excludes this repo
+                }
                 else if ( WILDCARD.equals( repo ) )
                 {
                     result = true;
@@ -810,6 +819,26 @@ public class MavenRepositorySystem
             URL url = new URL( originalRepository.getUrl() );
             return !( url.getHost().equals( "localhost" ) || url.getHost().equals( "127.0.0.1" )
                             || url.getProtocol().equals( "file" ) );
+        }
+        catch ( MalformedURLException e )
+        {
+            // bad url just skip it here. It should have been validated already, but the wagon lookup will deal with it
+            return false;
+        }
+    }
+
+    /**
+     * Checks the URL to see if this repository refers to a repository using HTTP protocol.
+     *
+     * @param originalRepository
+     * @return true if external.
+     */
+    static boolean isHttpRepo( ArtifactRepository originalRepository )
+    {
+        try
+        {
+            URL url = new URL( originalRepository.getUrl() );
+            return "http".equalsIgnoreCase( url.getProtocol() );
         }
         catch ( MalformedURLException e )
         {

@@ -156,6 +156,12 @@ under the License.
       <url>http://my.repository.com/repo/path</url>
     </mirror>
      -->
+    <mirror>
+      <id>http-forbidden</id>
+      <mirrorOf>http:*</mirrorOf>
+      <name>Pseudo repository to mirror repositories initially using HTTP protocol.</name>
+      <url>forbidden-http-protocol</url>
+    </mirror>
   </mirrors>
 
   <!-- profiles
