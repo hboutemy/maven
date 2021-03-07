@@ -160,7 +160,7 @@ under the License.
       <id>http-forbidden</id>
       <mirrorOf>external:http:*</mirrorOf>
       <name>Pseudo repository to mirror external repositories initially using HTTP protocol.</name>
-      <url>forbidden-http-protocol</url>
+      <url>reject</url>
     </mirror>
   </mirrors>
 
