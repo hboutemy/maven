@@ -157,10 +157,10 @@ under the License.
     </mirror>
      -->
     <mirror>
-      <id>maven-default:http-forbidden</id>
+      <id>maven-default-http-blocker</id>
       <mirrorOf>external:http:*</mirrorOf>
-      <name>Pseudo repository to mirror external repositories initially using HTTP protocol.</name>
-      <url>reject</url><!-- reject download requests from this mirror -->
+      <name>Pseudo repository to mirror external repositories initially using HTTP.</name>
+      <url>reject</url><!-- reject download requests from this mirror (to be replaced with new settings element) -->
     </mirror>
   </mirrors>
 
