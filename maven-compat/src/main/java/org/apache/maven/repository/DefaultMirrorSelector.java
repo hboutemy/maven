@@ -170,7 +170,8 @@ public class DefaultMirrorSelector
         try
         {
             URL url = new URL( originalRepository.getUrl() );
-            return "http".equalsIgnoreCase( url.getProtocol() )
+            return ( "http".equalsIgnoreCase( url.getProtocol() ) || "dav:http".equalsIgnoreCase( url.getProtocol() )
+                || "dav+http".equalsIgnoreCase( url.getProtocol() ) )
                 && !( "localhost".equals( url.getHost() ) || "127.0.0.1".equals( url.getHost() ) );
         }
         catch ( MalformedURLException e )
