@@ -43,9 +43,9 @@ under the License.
  | values (values used when the setting is not specified) are provided.
  |
  |-->
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 http://maven.apache.org/xsd/settings-1.2.0.xsd">
   <!-- localRepository
    | The path to the local repository maven will use to store artifacts.
    |
@@ -160,7 +160,8 @@ under the License.
       <id>maven-default-http-blocker</id>
       <mirrorOf>external:http:*</mirrorOf>
       <name>Pseudo repository to mirror external repositories initially using HTTP.</name>
-      <url>reject</url><!-- reject download requests from this mirror (to be replaced with new settings element) -->
+      <url>http://localhost/</url>
+      <block>true</block>
     </mirror>
   </mirrors>
 

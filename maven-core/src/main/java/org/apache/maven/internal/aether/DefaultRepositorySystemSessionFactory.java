@@ -177,8 +177,8 @@ public class DefaultRepositorySystemSessionFactory
         DefaultMirrorSelector mirrorSelector = new DefaultMirrorSelector();
         for ( Mirror mirror : request.getMirrors() )
         {
-            mirrorSelector.add( mirror.getId(), mirror.getUrl(), mirror.getLayout(), false, mirror.getMirrorOf(),
-                                mirror.getMirrorOfLayouts() );
+            mirrorSelector.add( mirror.getId(), mirror.getUrl(), mirror.getLayout(), false, mirror.isBlock(),
+                                mirror.getMirrorOf(), mirror.getMirrorOfLayouts() );
         }
         session.setMirrorSelector( mirrorSelector );
 
