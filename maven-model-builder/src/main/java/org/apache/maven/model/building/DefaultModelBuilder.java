@@ -64,6 +64,7 @@ import org.apache.maven.model.Repository;
 import org.apache.maven.model.building.ModelProblem.Severity;
 import org.apache.maven.model.building.ModelProblem.Version;
 import org.apache.maven.model.composition.DependencyManagementImporter;
+import org.apache.maven.model.composition.PluginManagementImporter;
 import org.apache.maven.model.inheritance.InheritanceAssembler;
 import org.apache.maven.model.interpolation.ModelInterpolator;
 import org.apache.maven.model.io.ModelParseException;
@@ -137,6 +138,9 @@ public class DefaultModelBuilder
 
     @Inject
     private DependencyManagementImporter dependencyManagementImporter;
+
+    @Inject
+    private PluginManagementImporter pluginManagementImporter;
 
     @Inject
     @Nullable
@@ -504,6 +508,9 @@ public class DefaultModelBuilder
 
         // model path translation
         modelPathTranslator.alignToBaseDirectory( resultModel, resultModel.getProjectDirectory(), request );
+
+        // plugin management import
+        importPluginManagement( resultModel, request, problems, imports );
 
         // plugin management injection
         pluginManagementInjector.injectManagement( resultModel, request, problems );
@@ -1251,6 +1258,220 @@ public class DefaultModelBuilder
         return superPomProvider.getSuperModel( "4.0.0" ).clone();
     }
 
+    private void importPluginManagement( Model model, ModelBuildingRequest request,
+                                        DefaultModelProblemCollector problems, Collection<String> importIds )
+    {
+        PluginManagement pluginMgmt = ( model.getBuild() == null ) ? null : model.getBuild().getPluginManagement();
+
+        if ( pluginMgmt == null )
+        {
+            return;
+        }
+
+        String importing = model.getGroupId() + ':' + model.getArtifactId() + ':' + model.getVersion();
+
+        importIds.add( importing );
+
+        List<PluginManagement> importPluginMgmts = null;
+
+        for ( Iterator<Plugin> it = pluginMgmt.getPlugins().iterator(); it.hasNext(); )
+        {
+            Plugin plugin = it.next();
+
+            if ( !"import".equals( plugin.getInherited() ) )
+            {
+                continue;
+            }
+
+            it.remove();
+
+            PluginManagement importMgmt = loadPluginManagement( model, request, problems,
+                                                                        plugin, importIds );
+
+            if ( importMgmt != null )
+            {
+                if ( importPluginMgmts == null )
+                {
+                    importPluginMgmts = new ArrayList<>();
+                }
+
+                importPluginMgmts.add( importMgmt );
+            }
+        }
+
+        importIds.remove( importing );
+
+        pluginManagementImporter.importManagement( model, importPluginMgmts, request, problems );
+    }
+
+    private PluginManagement loadPluginManagement( Model model, ModelBuildingRequest request,
+                                                   DefaultModelProblemCollector problems, Plugin plugin,
+                                                   Collection<String> importIds )
+    {
+        String groupId = plugin.getGroupId();
+        String artifactId = plugin.getArtifactId();
+        String version = plugin.getVersion();
+
+        if ( groupId == null || groupId.length() <= 0 )
+        {
+            problems.add( new ModelProblemCollectorRequest( Severity.ERROR, Version.BASE )
+                    .setMessage( "'build.pluginManagement.plugins.plugin.groupId' for " + plugin.getKey()
+                                     + " is missing." )
+                    .setLocation( plugin.getLocation( "" ) ) );
+            return null;
+        }
+        if ( artifactId == null || artifactId.length() <= 0 )
+        {
+            problems.add( new ModelProblemCollectorRequest( Severity.ERROR, Version.BASE )
+                    .setMessage( "'build.pluginManagement.plugins.plugin.artifactId' for " + plugin.getKey()
+                                     + " is missing." )
+                    .setLocation( plugin.getLocation( "" ) ) );
+            return null;
+        }
+        if ( version == null || version.length() <= 0 )
+        {
+            problems.add( new ModelProblemCollectorRequest( Severity.ERROR, Version.BASE )
+                    .setMessage( "'build.pluginManagement.plugins.plugin.version' for " + plugin.getKey()
+                                     + " is missing." )
+                    .setLocation( plugin.getLocation( "" ) ) );
+            return null;
+        }
+
+        String imported = groupId + ':' + artifactId + ':' + version;
+
+        if ( importIds.contains( imported ) )
+        {
+            String message = "The plugins with inherited=import form a cycle: "; // mix of dependencyManagement and
+                                                                                 // pluginManagement import?
+            for ( String modelId : importIds )
+            {
+                message += modelId + " -> ";
+            }
+            message += imported;
+            problems.add( new ModelProblemCollectorRequest( Severity.ERROR, Version.BASE ).setMessage( message ) );
+
+            return null;
+        }
+
+        PluginManagement importMgmt =
+            fromCache( request.getModelCache(), groupId, artifactId, version, ModelCacheTag.PLUGIN_IMPORT );
+        if ( importMgmt == null )
+        {
+            importMgmt =
+                doLoadPluginManagement( model, request, problems, plugin, groupId, artifactId, version, importIds );
+            if ( importMgmt != null )
+            {
+                intoCache( request.getModelCache(), groupId, artifactId, version, ModelCacheTag.PLUGIN_IMPORT,
+                           importMgmt );
+            }
+        }
+
+        return importMgmt;
+    }
+
+    @SuppressWarnings( "checkstyle:parameternumber" )
+    private PluginManagement doLoadPluginManagement( Model model, ModelBuildingRequest request,
+                                                             DefaultModelProblemCollector problems,
+                                                             Plugin plugin,
+                                                             String groupId,
+                                                             String artifactId,
+                                                             String version,
+                                                             Collection<String> importIds )
+    {
+        PluginManagement importMgmt;
+        final WorkspaceModelResolver workspaceResolver = request.getWorkspaceModelResolver();
+        final ModelResolver modelResolver = request.getModelResolver();
+        if ( workspaceResolver == null && modelResolver == null )
+        {
+          throw new NullPointerException( String.format(
+              "request.workspaceModelResolver and request.modelResolver cannot be null (POM %s imports pluginManagement from %s)",
+              ModelProblemUtils.toSourceHint( model ),
+              ModelProblemUtils.toId( groupId, artifactId, version ) ) );
+        }
+
+        Model importModel = null;
+        if ( workspaceResolver != null )
+        {
+            try
+            {
+                importModel = workspaceResolver.resolveEffectiveModel( groupId, artifactId, version );
+            }
+            catch ( UnresolvableModelException e )
+            {
+                problems.add( new ModelProblemCollectorRequest( Severity.FATAL, Version.BASE )
+                    .setMessage( e.getMessage() ).setException( e ) );
+                return null;
+            }
+        }
+
+        // no workspace resolver or workspace resolver returned null (i.e. model not in workspace)
+        if ( importModel == null )
+        {
+            final ModelSource importSource;
+            try
+            {
+                importSource = modelResolver.resolveModel( toDependency( plugin ) );
+            }
+            catch ( UnresolvableModelException e )
+            {
+                StringBuilder buffer = new StringBuilder( 256 );
+                buffer.append( "Non-resolvable pluginManagement import POM" );
+                if ( !containsCoordinates( e.getMessage(), groupId, artifactId, version ) )
+                {
+                    buffer.append( ' ' ).append( ModelProblemUtils.toId( groupId, artifactId, version ) );
+                }
+                buffer.append( ": " ).append( e.getMessage() );
+
+                problems.add( new ModelProblemCollectorRequest( Severity.ERROR, Version.BASE )
+                    .setMessage( buffer.toString() ).setLocation( plugin.getLocation( "" ) )
+                    .setException( e ) );
+                return null;
+            }
+
+            final ModelBuildingResult importResult;
+            try
+            {
+                ModelBuildingRequest importRequest = new DefaultModelBuildingRequest();
+                importRequest.setValidationLevel( ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL );
+                importRequest.setModelCache( request.getModelCache() );
+                importRequest.setSystemProperties( request.getSystemProperties() );
+                importRequest.setUserProperties( request.getUserProperties() );
+                importRequest.setLocationTracking( request.isLocationTracking() );
+
+                importRequest.setModelSource( importSource );
+                importRequest.setModelResolver( modelResolver.newCopy() );
+
+                importResult = build( importRequest, importIds );
+            }
+            catch ( ModelBuildingException e )
+            {
+                problems.addAll( e.getProblems() );
+                return null;
+            }
+
+            problems.addAll( importResult.getProblems() );
+
+            importModel = importResult.getEffectiveModel();
+        }
+
+        importMgmt = ( importModel.getBuild() == null ) ? null : importModel.getBuild().getPluginManagement();
+
+        if ( importMgmt == null )
+        {
+            importMgmt = new PluginManagement();
+        }
+        return importMgmt;
+    }
+
+    private Dependency toDependency( Plugin plugin )
+    {
+        Dependency dep = new Dependency();
+        dep.setGroupId( plugin.getGroupId() );
+        dep.setArtifactId( plugin.getArtifactId() );
+        dep.setVersion( plugin.getVersion() );
+        return dep;
+    }
+
     private void importDependencyManagement( Model model, ModelBuildingRequest request,
                                              DefaultModelProblemCollector problems, Collection<String> importIds )
     {
@@ -1278,8 +1499,8 @@ public class DefaultModelBuilder
 
             it.remove();
 
-            DependencyManagement importMgmt = loadDependencyManagement( model, request, problems,
-                                                                        dependency, importIds );
+            DependencyManagement importMgmt =
+                loadDependencyManagement( model, request, problems, dependency, importIds );
 
             if ( importMgmt != null )
             {
@@ -1376,9 +1597,9 @@ public class DefaultModelBuilder
         if ( workspaceResolver == null && modelResolver == null )
         {
             throw new NullPointerException( String.format(
-                "request.workspaceModelResolver and request.modelResolver cannot be null (parent POM %s and POM %s)",
-                ModelProblemUtils.toId( groupId, artifactId, version ),
-                ModelProblemUtils.toSourceHint( model ) ) );
+                "request.workspaceModelResolver and request.modelResolver cannot be null (POM %s imports dependencyManagement from %s)",
+                ModelProblemUtils.toSourceHint( model ),
+                ModelProblemUtils.toId( groupId, artifactId, version ) ) );
         }
 
         Model importModel = null;
@@ -1407,7 +1628,7 @@ public class DefaultModelBuilder
             catch ( UnresolvableModelException e )
             {
                 StringBuilder buffer = new StringBuilder( 256 );
-                buffer.append( "Non-resolvable import POM" );
+                buffer.append( "Non-resolvable dependencyManagement import POM" );
                 if ( !containsCoordinates( e.getMessage(), groupId, artifactId, version ) )
                 {
                     buffer.append( ' ' ).append( ModelProblemUtils.toId( groupId, artifactId, version ) );

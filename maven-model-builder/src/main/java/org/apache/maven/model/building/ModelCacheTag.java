@@ -21,6 +21,7 @@ package org.apache.maven.model.building;
 
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.PluginManagement;
 
 /**
  * Describes a tag used by the model builder to access a {@link ModelCache}. This interface basically aggregates a name
@@ -123,6 +124,38 @@ interface ModelCacheTag<T>
 
         @Override
         public DependencyManagement fromCache( DependencyManagement data )
+        {
+            return intoCache( data );
+        }
+
+    };
+
+    /**
+     * The tag used to denote an effective plugin management section from an imported model.
+     */
+    ModelCacheTag<PluginManagement> PLUGIN_IMPORT = new ModelCacheTag<PluginManagement>()
+    {
+
+        @Override
+        public String getName()
+        {
+            return "plugin-import";
+        }
+
+        @Override
+        public Class<PluginManagement> getType()
+        {
+            return PluginManagement.class;
+        }
+
+        @Override
+        public PluginManagement intoCache( PluginManagement data )
+        {
+            return ( data != null ) ? data.clone() : null;
+        }
+
+        @Override
+        public PluginManagement fromCache( PluginManagement data )
         {
             return intoCache( data );
         }

@@ -27,60 +27,68 @@ import java.util.Map;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.apache.maven.model.Dependency;
-import org.apache.maven.model.DependencyManagement;
+import org.apache.maven.model.Build;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginManagement;
 import org.apache.maven.model.building.ModelBuildingRequest;
 import org.apache.maven.model.building.ModelProblemCollector;
 
 /**
- * Handles the import of dependency management from other models into the target model.
+ * Handles the import of plugin management from other models into the target model.
  *
- * @author Benjamin Bentmann
+ * @author Andrés Almiray & Hervé Boutemy
  */
 @Named
 @Singleton
-public class DefaultDependencyManagementImporter
-    implements DependencyManagementImporter
+public class DefaultPluginManagementImporter
+    implements PluginManagementImporter
 {
 
     @Override
-    public void importManagement( Model target, List<? extends DependencyManagement> sources,
+    public void importManagement( Model target, List<? extends PluginManagement> sources,
                                   ModelBuildingRequest request, ModelProblemCollector problems )
     {
         if ( sources != null && !sources.isEmpty() )
         {
-            Map<String, Dependency> dependencies = new LinkedHashMap<>();
+            Map<String, Plugin> plugins = new LinkedHashMap<>();
 
-            DependencyManagement depMgmt = target.getDependencyManagement();
-
-            if ( depMgmt != null )
+            if ( target.getBuild() == null )
             {
-                for ( Dependency dependency : depMgmt.getDependencies() )
+                target.setBuild( new Build() );
+            }
+            
+            PluginManagement pluginMgmt = target.getBuild().getPluginManagement();
+
+            if ( pluginMgmt != null )
+            {
+                for ( Plugin plugin : pluginMgmt.getPlugins() )
                 {
-                    dependencies.put( dependency.getManagementKey(), dependency );
+                    plugins.put( plugin.getKey(), plugin );
                 }
             }
             else
             {
-                depMgmt = new DependencyManagement();
-                target.setDependencyManagement( depMgmt );
+                pluginMgmt = new PluginManagement();
+                target.getBuild().setPluginManagement( pluginMgmt );
             }
 
-            for ( DependencyManagement source : sources )
+            for ( PluginManagement source : sources )
             {
-                for ( Dependency dependency : source.getDependencies() )
+                for ( Plugin plugin : source.getPlugins() )
                 {
-                    String key = dependency.getManagementKey();
-                    if ( !dependencies.containsKey( key ) )
+                    String key = plugin.getKey();
+                    if ( !plugins.containsKey( key ) )
                     {
-                        dependencies.put( key, dependency );
+                        plugins.put( key, plugin );
+                        // TODO: limit import from PluginManagement? from trust and flexibility points of view
+                        // version, executions, dependencies, goals, configuration
                     }
-                    // ignore dependency that already existed
+                    // ignore plugin that already existed
                 }
             }
 
-            depMgmt.setDependencies( new ArrayList<>( dependencies.values() ) );
+            pluginMgmt.setPlugins( new ArrayList<>( plugins.values() ) );
         }
     }
 
